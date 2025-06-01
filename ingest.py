@@ -2,7 +2,11 @@ import asyncio
 import os
 import sys
 import subprocess
-import re
+import uuid
+import requests
+from azure.storage.blob import BlobServiceClient
+from dotenv import load_dotenv
+load_dotenv()
 
 from loguru import logger
 
@@ -15,6 +19,9 @@ AUDIO_STREAM_URL = "https://live-hls-web-aje.getaj.net/AJE/03.m3u8"
 TARGET_SAMPLE_RATE = 16_000
 CHUNK_SIZE = 16_000  # 0.25 second of audio at 16kHz, mono, 16-bit PCM
 FORCE_TRANSCRIBE_MS = 10000  # Force transcription if buffer exceeds this many ms (default: 5 seconds)
+
+connection_string = os.environ['AZURE_STORAGE_CONNECTION_STRING']
+blob_service_client = BlobServiceClient.from_connection_string(connection_string)
 
 app = modal.App("leotele-realtime-m3u8")
 
@@ -42,6 +49,8 @@ image = (
         "fastapi==0.115.12",
         "numpy<2",
         "pydub==0.25.1",
+        "azure-storage-blob",
+        "python-dotenv"
     )
     .entrypoint([])
 )
@@ -68,7 +77,35 @@ def stream_audio_from_m3u8(m3u8_url=None, chunk_size=None):
         proc.terminate()
         proc.wait()
 
-@app.cls(volumes={"/cache": model_cache}, gpu="a10g", image=image)
+def capture_frame(m3u8_url, output_path=None):
+    if output_path is None:
+        output_path = f"/tmp/frame_{uuid.uuid4().hex}.jpg"
+    ffmpeg_cmd = [
+        "ffmpeg", "-y", "-loglevel", "quiet", "-i", m3u8_url,
+        "-frames:v", "1", "-q:v", "2", output_path
+    ]
+    subprocess.run(ffmpeg_cmd, check=True)
+    return output_path
+
+def upload_image_to_tmpfiles(image_path):
+    # Genera un nombre único para el blob
+    blob_name = str(uuid.uuid4()) + os.path.splitext(image_path)[-1]
+    # Selecciona el contenedor. Cambia 'imagenes' si tu contenedor tiene otro nombre.
+    container_name = 'imagenes'
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    # Sube la imagen
+    with open(image_path, "rb") as data:
+        blob_client.upload_blob(data, overwrite=True)
+    # Retorna la URL pública (si el blob es público o tienes permisos)
+    return blob_client.url
+
+def get_scene_description(image_url, endpoint_url, question="Describe the scene"):
+    payload = {"image_url": image_url, "question": question}
+    response = requests.post(endpoint_url, json=payload)
+    response.raise_for_status()
+    return response.json()
+
+@app.cls(volumes={"/cache": model_cache}, gpu="a10g", image=image, secrets=[modal.Secret.from_dotenv()])
 @modal.concurrent(max_inputs=14, target_inputs=10)
 class Parakeet:
     @modal.enter()
@@ -106,7 +143,14 @@ class Parakeet:
                     if len(audio_segment) > 0:
                         text = self.transcribe(audio_segment.raw_data)
                         if text:
-                            await q.put.aio(text, partition="transcription")
+                            # Capture frame and upload to tmpfiles
+                            image_path = capture_frame(AUDIO_STREAM_URL)
+                            image_url = upload_image_to_tmpfiles(image_path)
+                            scene = get_scene_description(
+                                image_url,
+                                os.environ["IMAGE_DESCRIBER_URL"]
+                            )
+                            await q.put.aio(f"[Transcription: {text}]\n[Scene: {scene}]", partition="transcription")
                     await q.put.aio(END_OF_STREAM, partition="transcription")
                     break
 
@@ -118,7 +162,14 @@ class Parakeet:
                 else:
                     accumulated_ms += chunk_ms
                 if text:
-                    await q.put.aio(text, partition="transcription")
+                    # Capture frame and upload to tmpfiles
+                    image_path = capture_frame(AUDIO_STREAM_URL)
+                    image_url = upload_image_to_tmpfiles(image_path)
+                    scene = get_scene_description(
+                        image_url,
+                        os.environ["IMAGE_DESCRIBER_URL"]
+                    )
+                    await q.put.aio(f"[Transcription: {text}]\n[Scene: {scene}]", partition="transcription")
         except Exception as e:
             logger.error(f"Error handling queue: {type(e)}: {e}")
             return
@@ -143,29 +194,14 @@ class Parakeet:
         )
         audio_segment += new_audio_segment
 
-        silent_windows = silence.detect_silence(
-            audio_segment,
-            min_silence_len=min_silence_len,
-            silence_thresh=silence_thresh,
-        )
-
-        # Normal silence-based transcription
-        if len(silent_windows) > 0:
-            last_window = silent_windows[-1]
-            if last_window[0] == 0 and last_window[1] == len(audio_segment):
-                audio_segment = AudioSegment.empty()
-                return audio_segment, None, False
-            segment_to_transcribe = audio_segment[: last_window[1]]
-            audio_segment = audio_segment[last_window[1] :]
-            try:
-                text = self.transcribe(segment_to_transcribe.raw_data)
-                return audio_segment, text, True
-            except Exception as e:
-                logger.error(f"Transcription error: {e}")
-                raise e
-
-        # Force transcription if buffer exceeds force_transcribe_ms
+        # Solo forzar transcripción cada 10 segundos, ignorando silencios
         if len(audio_segment) >= force_transcribe_ms:
+            # Chequear si el buffer es todo silencio
+            dBFS = audio_segment.dBFS if len(audio_segment) > 0 else -100
+            if dBFS < silence_thresh:
+                # Todo es silencio, limpiar buffer y no transcribir
+                audio_segment = AudioSegment.empty()
+                return audio_segment, None, True
             try:
                 text = self.transcribe(audio_segment.raw_data)
                 audio_segment = AudioSegment.empty()
@@ -194,18 +230,11 @@ async def send_live_audio(q, m3u8_url):
     await q.put.aio(END_OF_STREAM, partition="audio")
 
 async def receive_text(q):
-    buffer = ""
-    sentence_end = re.compile(r'[.!?]\s*$')
     while True:
         message = await q.get.aio(partition="transcription")
         if message == END_OF_STREAM:
-            if buffer:
-                print(buffer.strip())
             break
-        buffer += " " + message.strip()
-        if sentence_end.search(buffer):
-            print(buffer.strip())
-            buffer = ""
+        print(message.strip())
 
 class NoStdStreams(object):
     def __init__(self):
