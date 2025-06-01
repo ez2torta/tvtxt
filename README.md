@@ -1,32 +1,40 @@
-# Leotele: Real-Time News Transcription & Scene Description
+# Leotele: Live TV Transcription & Description
 
-**Leotele** is a Python pipeline and webapp that performs real-time audio transcription and visual scene description from a live news video stream (Al Jazeera English). It leverages cloud GPU infrastructure (Modal), state-of-the-art speech-to-text and vision-language models, and provides a simple web frontend for live monitoring.
+**Leotele** is a Python app that combines real-time audio transcription and visual scene description from a live news stream (Al Jazeera English). It runs on cloud GPUs (via Modal), uses cutting-edge speech and vision models, and offers a simple web interface to follow everything live.
 
-## Features
+## What It Does
 
-- **Real-time audio transcription** from an m3u8 video stream (Al Jazeera English)
-- **Scene description** for each video frame using a Vision-Language Model (Qwen2-VL via SGLang)
-- **Cloud GPU inference** using Modal for both ASR and VLM
-- **Live web frontend** that displays the latest transcription and scene description, auto-refreshing every 2 seconds
-- **No data is stored**: Only the latest result is kept in a local JSON file (`stream.json`)
-- **Easy to deploy and extend**
+- 🗣️ **Live audio transcription** from an m3u8 video stream (Al Jazeera English)
+- 🎞️ **Scene descriptions** from video frames using a Vision-Language Model (Qwen2-VL via SGLang)
+- ☁️ **Runs in the cloud** using Modal for both transcription and visual analysis
+- 🌐 **Live web interface** that updates every 2 seconds with the latest text
+- 🛑 **No storage**: Only the latest result is kept in a local JSON file (`stream.json`)
+- 🛠️ **Easy to set up and customize**
 
-## How it works
+## How It Works
 
-1. **Audio & Video Ingestion**: `ingest.py` reads audio and video frames from a live m3u8 stream using ffmpeg.
-2. **Transcription**: Audio is transcribed every 10 seconds (if not silent) using NVIDIA's Parakeet ASR model running on Modal.
-3. **Scene Description**: For each transcription, a video frame is captured and described using Qwen2-VL (via SGLang, also on Modal).
-4. **Result Storage**: The latest transcription and scene description are saved to `stream.json` (overwriting previous content).
-5. **Web Frontend**: `view.py` serves a simple web page that auto-refreshes to show the latest transcription and scene description, styled as a screenplay.
+1. **Grabs audio and video**: `ingest.py` pulls frames and audio from a live stream using ffmpeg.
+2. **Transcribes the audio**: Every 10 seconds (if there's speech), it sends the audio to NVIDIA’s Parakeet ASR on Modal.
+3. **Describes what’s on screen**: Grabs a matching frame and sends it to Qwen2-VL (via SGLang) for a description.
+4. **Saves the result**: Updates `stream.json` with the latest transcription and description.
+5. **Shows it live**: `view.py` runs a basic web viewer that updates automatically, styled like a screenplay.
 
-## File Overview
+## What’s in the Repo
 
-- `ingest.py` — Main pipeline: audio/video ingestion, Modal integration, result saving
-- `scene_describer.py` — Modal endpoint for Qwen2-VL scene description (SGLang)
-- `view.py` — Web frontend (Fasthtml) for live display
-- `stream.json` — Stores only the latest result (overwritten each update)
-- `test_m3u8_stream.py`, `test_capture_frame.py` — Utilities for testing stream ingestion
-- `requirements.txt` — Python dependencies
+- `ingest.py` — Main pipeline: grabs audio/video, talks to Modal, saves output
+- `scene_describer.py` — Modal endpoint for visual scene description
+- `view.py` — Simple web interface built with Fasthtml
+- `stream.json` — Keeps the latest result (gets overwritten each time)
+- `test_m3u8_stream.py`, `test_capture_frame.py` — Tools to test stream input
+- `requirements.txt` — Dependencies you’ll need
+
+## Get Started
+
+1. **Install everything**
+
+   ```bash
+   pip install -r requirements.txt
+
 
 ## Quickstart
 
@@ -55,8 +63,4 @@
 
 ## Disclaimer
 
-This is a live transcription and visual description of the Al Jazeera English channel. No data is stored. You can view the code at [https://github.com/aastroza/leotele](https://github.com/aastroza/leotele)
-
-## License
-
-MIT License
+This is a live transcription and visual description of the Al Jazeera English channel. No data is stored.
