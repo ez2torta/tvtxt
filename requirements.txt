@@ -1,2 +1,6 @@
 modal==1.0.2
+sglang==0.4.1
+azure-storage-blob
+python-fasthtml
+python-dotenv
 loguru
