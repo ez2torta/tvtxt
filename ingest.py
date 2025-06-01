@@ -4,6 +4,7 @@ import sys
 import subprocess
 import uuid
 import requests
+import json
 from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
 load_dotenv()
@@ -56,6 +57,8 @@ image = (
 )
 
 END_OF_STREAM = b"END_OF_STREAM_8f13d09"
+
+STREAM_JSON_PATH = os.path.join(os.path.dirname(__file__), 'stream.json')
 
 def stream_audio_from_m3u8(m3u8_url=None, chunk_size=None):
     if m3u8_url is None:
@@ -150,8 +153,10 @@ class Parakeet:
                                 image_url,
                                 os.environ["IMAGE_DESCRIBER_URL"]
                             )
-                            await q.put.aio(f"[Transcription: {text}]\n[Scene: {scene}]", partition="transcription")
+                            await q.put.aio(f"{text}", partition="transcription")
+                            await q.put.aio(f"{scene}", partition="scene")
                     await q.put.aio(END_OF_STREAM, partition="transcription")
+                    await q.put.aio(END_OF_STREAM, partition="scene")
                     break
 
                 audio_segment, text, force_transcribed = await self.handle_audio_chunk(
@@ -169,7 +174,8 @@ class Parakeet:
                         image_url,
                         os.environ["IMAGE_DESCRIBER_URL"]
                     )
-                    await q.put.aio(f"[Transcription: {text}]\n[Scene: {scene}]", partition="transcription")
+                    await q.put.aio(f"{text}", partition="transcription")
+                    await q.put.aio(f"{scene}", partition="scene")
         except Exception as e:
             logger.error(f"Error handling queue: {type(e)}: {e}")
             return
@@ -231,10 +237,18 @@ async def send_live_audio(q, m3u8_url):
 
 async def receive_text(q):
     while True:
-        message = await q.get.aio(partition="transcription")
-        if message == END_OF_STREAM:
+        message_transcription = await q.get.aio(partition="transcription")
+        scene_description = await q.get.aio(partition="scene")
+        if message_transcription == END_OF_STREAM:
             break
-        print(message.strip())
+        print(f"T: {message_transcription.strip()}")
+        print(f"S: {scene_description.strip()}")
+        save_last_to_stream_json(message_transcription.strip(), scene_description.strip())
+
+def save_last_to_stream_json(transcription, scene):
+    data = {'transcription': transcription, 'scene': scene}
+    with open(STREAM_JSON_PATH, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 class NoStdStreams(object):
     def __init__(self):
