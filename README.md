@@ -1,40 +1,32 @@
-# Leotele: Live TV Transcription & Description
+# Leotele: Real-Time News Transcription & Scene Description
 
-**Leotele** is a Python app that combines real-time audio transcription and visual scene description from a live news stream (Al Jazeera English). It runs on cloud GPUs (via Modal), uses cutting-edge speech and vision models, and offers a simple web interface to follow everything live.
+**Leotele** is a Python pipeline and webapp that performs real-time audio transcription and visual scene description from a live news video stream (Al Jazeera English). It leverages cloud GPU infrastructure (Modal), state-of-the-art speech-to-text and vision-language models, Redis Cloud for state sharing, and provides a simple web frontend for live monitoring.
 
-## What It Does
+## Features
 
-- 🗣️ **Live audio transcription** from an m3u8 video stream (Al Jazeera English)
-- 🎞️ **Scene descriptions** from video frames using a Vision-Language Model (Qwen2-VL via SGLang)
-- ☁️ **Runs in the cloud** using Modal for both transcription and visual analysis
-- 🌐 **Live web interface** that updates every 2 seconds with the latest text
-- 🛑 **No storage**: Only the latest result is kept in a local JSON file (`stream.json`)
-- 🛠️ **Easy to set up and customize**
+- **Real-time audio transcription** from an m3u8 video stream (Al Jazeera English)
+- **Scene description** for each video frame using a Vision-Language Model (Qwen2-VL via Outlines/SGLang)
+- **Cloud GPU inference** using Modal for both ASR and VLM
+- **Live web frontend** (Fasthtml) that displays the latest transcription and scene description, auto-refreshing every 2 seconds
+- **No persistent data storage**: Only the latest result is kept in Redis Cloud
+- **Easy to deploy and extend**
 
-## How It Works
+## How it works
 
-1. **Grabs audio and video**: `ingest.py` pulls frames and audio from a live stream using ffmpeg.
-2. **Transcribes the audio**: Every 10 seconds (if there's speech), it sends the audio to NVIDIA’s Parakeet ASR on Modal.
-3. **Describes what’s on screen**: Grabs a matching frame and sends it to Qwen2-VL (via SGLang) for a description.
-4. **Saves the result**: Updates `stream.json` with the latest transcription and description.
-5. **Shows it live**: `view.py` runs a basic web viewer that updates automatically, styled like a screenplay.
+1. **Audio & Video Ingestion**: `ingest.py` reads audio and video frames from a live m3u8 stream using ffmpeg.
+2. **Transcription**: Audio is transcribed every 10 seconds (if not silent) using NVIDIA's Parakeet ASR model running on Modal.
+3. **Scene Description**: For each transcription, a video frame is captured and described using Qwen2-VL (via Outlines/SGLang, also on Modal). The endpoint returns a JSON with `heading`, `action`, and `character` fields.
+4. **Result Storage**: The latest transcription and scene description are saved to Redis Cloud (key: `leotele:latest`).
+5. **Web Frontend**: `view.py` serves a simple web page that auto-refreshes to show the latest transcription and scene description, styled as a screenplay.
 
-## What’s in the Repo
+## File Overview
 
-- `ingest.py` — Main pipeline: grabs audio/video, talks to Modal, saves output
-- `scene_describer.py` — Modal endpoint for visual scene description
-- `view.py` — Simple web interface built with Fasthtml
-- `stream.json` — Keeps the latest result (gets overwritten each time)
-- `test_m3u8_stream.py`, `test_capture_frame.py` — Tools to test stream input
-- `requirements.txt` — Dependencies you’ll need
-
-## Get Started
-
-1. **Install everything**
-
-   ```bash
-   pip install -r requirements.txt
-
+- `ingest.py` — Main pipeline: audio/video ingestion, Modal integration, Redis Cloud integration
+- `scene_describer.py` — Modal endpoint for Qwen2-VL scene description (Outlines/SGLang)
+- `view.py` — Web frontend (Fasthtml) for live display, reads from Redis Cloud
+- `.env` — Stores credentials for Azure, Modal, and Redis Cloud
+- `requirements.txt` — Python dependencies (includes modal, outlines, sglang, redis, etc.)
+- `test_m3u8_stream.py`, `test_capture_frame.py` — Utilities for testing stream ingestion
 
 ## Quickstart
 
@@ -45,7 +37,7 @@
    ```
 
 2. **Set up environment variables**
-   - Configure your Azure Blob Storage and Modal credentials in a `.env` file.
+   - Configure your Azure Blob Storage, Modal, and Redis Cloud credentials in a `.env` file.
 
 3. **Run the pipeline**
 

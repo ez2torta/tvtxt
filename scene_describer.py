@@ -1,64 +1,24 @@
-# # Run Qwen2-VL on SGLang for Visual QA
-
-# Vision-Language Models (VLMs) are like LLMs with eyes:
-# they can generate text based not just on other text,
-# but on images as well.
-
-# This example shows how to run a VLM on Modal using the
-# [SGLang](https://github.com/sgl-project/sglang) library.
-
-# Here's a sample inference, with the image rendered directly (and at low resolution) in the terminal:
-
-# ![Sample output answering a question about a photo of the Statue of Liberty](https://modal-public-assets.s3.amazonaws.com/sgl_vlm_qa_sol.png)
-
-# ## Setup
-
-# First, we'll import the libraries we need locally
-# and define some constants.
-
 import os
 import time
-import warnings
-from typing import Optional
 from uuid import uuid4
 
 import modal
 
-# VLMs are generally larger than LLMs with the same cognitive capability.
-# LLMs are already hard to run effectively on CPUs, so we'll use a GPU here.
-# We find that inference for a single input takes about 3-4 seconds on an A10G.
-
-# You can customize the GPU type and count using the `GPU_TYPE` and `GPU_COUNT` environment variables.
-# If you want to see the model really rip, try an `"a100-80gb"` or an `"h100"`
-# on a large batch.
 
 GPU_TYPE = os.environ.get("GPU_TYPE", "l40s")
 GPU_COUNT = os.environ.get("GPU_COUNT", 1)
 
 GPU_CONFIG = f"{GPU_TYPE}:{GPU_COUNT}"
-
-SGL_LOG_LEVEL = "error"  # try "debug" or "info" if you have issues
-
 MINUTES = 60  # seconds
-
-# We use the [Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct)
-# model by Alibaba.
-
 MODEL_PATH = "Qwen/Qwen2-VL-7B-Instruct"
-MODEL_REVISION = "a7a06a1cc11b4514ce9edcde0e3ca1d16e5ff2fc"
-TOKENIZER_PATH = "Qwen/Qwen2-VL-7B-Instruct"
-MODEL_CHAT_TEMPLATE = "qwen2-vl"
 
 # We download it from the Hugging Face Hub using the Python function below.
-
-
 def download_model_to_image():
     import transformers
     from huggingface_hub import snapshot_download
 
     snapshot_download(
         MODEL_PATH,
-        revision=MODEL_REVISION,
         ignore_patterns=["*.pt", "*.bin"],
     )
 
@@ -76,7 +36,8 @@ tag = f"{cuda_version}-{flavor}-{operating_sys}"
 
 vlm_image = (
     modal.Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.11")
-    .pip_install(  # add sglang and some Python dependencies
+    .apt_install("git")
+    .pip_install(
         "transformers==4.47.1",
         "numpy<2",
         "fastapi[standard]==0.115.4",
@@ -84,33 +45,19 @@ vlm_image = (
         "requests==2.32.3",
         "starlette==0.41.2",
         "torch==2.4.0",
-        "sglang[all]==0.4.1",
-        "sgl-kernel==0.1.0",
-        # as per sglang website: https://sgl-project.github.io/start/install.html
-        extra_options="--find-links https://flashinfer.ai/whl/cu124/torch2.4/flashinfer/",
+        "outlines",
+        "datasets",
+        "sentencepiece",
+        "accelerate>=0.26.0",
+        "pillow",
+        "rich"
     )
     .run_function(  # download the model by running a Python function
         download_model_to_image
     )
-    .pip_install(  # add an optional extra that renders images in the terminal
-        "term-image==0.7.1"
-    )
 )
 
-# ## Defining a Visual QA service
-
-# Running an inference service on Modal is as easy as writing inference in Python.
-
-# The code below adds a modal `Cls` to an `App` that runs the VLM.
-
-# We define a method `generate` that takes a URL for an image and a question
-# about the image as inputs and returns the VLM's answer.
-
-# By decorating it with `@modal.fastapi_endpoint`, we expose it as an HTTP endpoint,
-# so it can be accessed over the public Internet from any client.
-
 app = modal.App("leotele-sgl-vlm")
-
 
 @app.cls(
     gpu=GPU_CONFIG,
@@ -122,26 +69,33 @@ app = modal.App("leotele-sgl-vlm")
 class Model:
     @modal.enter()  # what should a container do after it starts but before it gets input?
     def start_runtime(self):
-        """Starts an SGL runtime to execute inference."""
-        import sglang as sgl
+        import outlines
+        import torch
+        from transformers import Qwen2VLForConditionalGeneration
 
-        self.runtime = sgl.Runtime(
-            model_path=MODEL_PATH,
-            tokenizer_path=TOKENIZER_PATH,
-            tp_size=GPU_COUNT,  # t_ensor p_arallel size, number of GPUs to split the model over
-            log_level=SGL_LOG_LEVEL,
-            grammar_backend="outlines"
+        # Create the Outlines model
+        self.model = outlines.models.transformers_vision(
+            MODEL_PATH,
+            model_class=Qwen2VLForConditionalGeneration,
+            model_kwargs={
+                "device_map": "auto",
+                "torch_dtype": torch.bfloat16,
+            },
+            processor_kwargs={
+                "device": "cuda", # set to "cpu" if you don't have a GPU
+            },
         )
-        self.runtime.endpoint.chat_template = sgl.lang.chat_template.get_chat_template(
-            MODEL_CHAT_TEMPLATE
-        )
-        sgl.set_default_backend(self.runtime)
 
     @modal.fastapi_endpoint(method="POST", docs=True)
     def generate(self, request: dict) -> dict:
-        from pathlib import Path
         import requests
-        import sglang as sgl
+        from pydantic import BaseModel, Field
+        from io import BytesIO
+        from urllib.request import urlopen
+        from transformers import AutoProcessor
+        import outlines
+
+        from PIL import Image
 
         start = time.monotonic_ns()
         request_id = uuid4()
@@ -156,122 +110,60 @@ class Model:
         response = requests.get(image_url)
         response.raise_for_status()
 
-        image_filename = image_url.split("/")[-1]
-        image_path = Path(f"/tmp/{uuid4()}-{image_filename}")
-        image_path.write_bytes(response.content)
+        # Define the schema using Pydantic
+        class SceneMovieScript(BaseModel):
+            heading: str = Field(..., description="One line description of the location and time of the day. Be concise. Example: EXT SUBURBAN HOME - NIGHT")
+            action: str = Field(..., description="The description of the scene. Be very concise and clear.")
+            character: str = Field(..., description="The name of the character speaking. If there is no character, use 'Narrator'.")
 
-        @sgl.function
-        def image_qa(s, image_path, question):
-            s += sgl.user(sgl.image(str(image_path)) + question)
-            s += sgl.assistant(sgl.gen("answer"))
+        def get_image_from_url(image_url):
+            img_byte_stream = BytesIO(urlopen(image_url).read())
+            return Image.open(img_byte_stream).convert("RGB")
 
+        # Set up the content you want to send to the model
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        # The image is provided as a PIL Image object
+                        "type": "image",
+                        "image": get_image_from_url(image_url),
+                    },
+                    {
+                        "type": "text",
+                        "text": f"""You are an expert at writing movie scripts based on images.
+                        Please describe the scene in a movie script format. Be concise and clear.
 
-        question1 = request.get("question1")
-        if question1 is None:
-            question1 = "Describe the image as a movie script title scene, one line description of the location and time of the day. Example: EXT SUBURBAN HOME - NIGHT. Be very concise."
-        question2 = request.get("question2")
-        if question2 is None:
-            question2 = "Describe the image. Be very concise."
+                        Return the information in the following JSON schema:
+                        {SceneMovieScript.model_json_schema()}
+                    """},
+                ],
+            }
+        ]
 
-        state1 = image_qa.run(
-            image_path=image_path, question=question1, max_new_tokens=128
+        # Convert the messages to the final prompt
+        processor = AutoProcessor.from_pretrained(MODEL_PATH)
+        prompt = processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
         )
-        state2 = image_qa.run(
-            image_path=image_path, question=question2, max_new_tokens=128
+
+        script_generator = outlines.generate.json(
+            self.model,
+            SceneMovieScript,
+
         )
-        # show the question and image in the terminal for demonstration purposes
-        print(Colors.BOLD, Colors.GRAY, "Question: ", question1, Colors.END, sep="")
+
+        # Generate the receipt summary
+        result = script_generator(prompt, [get_image_from_url(image_url)])
+
         print(
             f"request {request_id} completed in {round((time.monotonic_ns() - start) / 1e9, 2)} seconds"
         )
-        return {"heading": state1["answer"], "action": state2["answer"]}
+        print(f"Response: {result}")
+    
+        return {"heading": result.heading, "action": result.action, "character": result.character}
 
     @modal.exit()  # what should a container do before it shuts down?
     def shutdown_runtime(self):
         self.runtime.shutdown()
-
-
-# ## Asking questions about images via POST
-
-# Now, we can send this Modal Function a POST request with an image and a question
-# and get back an answer.
-
-# The code below will start up the inference service
-# so that it can be run from the terminal as a one-off,
-# like a local script would be, using `modal run`:
-
-# ```bash
-# modal run sgl_vlm.py
-# ```
-
-# By default, we hit the endpoint twice to demonstrate how much faster
-# the inference is once the server is running.
-
-
-@app.local_entrypoint()
-def main(
-    image_url: Optional[str] = None, question: Optional[str] = None, twice: bool = True
-):
-    import json
-    import urllib.request
-
-    model = Model()
-
-    payload = json.dumps(
-        {
-            "image_url": image_url,
-            "question": question,
-        },
-    )
-
-    req = urllib.request.Request(
-        model.generate.get_web_url(),
-        data=payload.encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    with urllib.request.urlopen(req) as response:
-        assert response.getcode() == 200, response.getcode()
-        print(json.loads(response.read().decode()))
-
-    if twice:
-        # second response is faster, because the Function is already running
-        with urllib.request.urlopen(req) as response:
-            assert response.getcode() == 200, response.getcode()
-            print(json.loads(response.read().decode()))
-
-
-# ## Deployment
-
-# To set this up as a long-running, but serverless, service, we can deploy it to Modal:
-
-# ```bash
-# modal deploy sgl_vlm.py
-# ```
-
-# And then send requests from anywhere. See the [docs](https://modal.com/docs/guide/webhook-urls)
-# for details on the `web_url` of the function, which also appears in the terminal output
-# when running `modal deploy`.
-
-# You can also find interactive documentation for the endpoint at the `/docs` route of the web endpoint URL.
-
-# ## Addenda
-
-# The rest of the code in this example is just utility code.
-
-warnings.filterwarnings(  # filter warning from the terminal image library
-    "ignore",
-    message="It seems this process is not running within a terminal. Hence, some features will behave differently or be disabled.",
-    category=UserWarning,
-)
-
-
-class Colors:
-    """ANSI color codes"""
-
-    GREEN = "\033[0;32m"
-    BLUE = "\033[0;34m"
-    GRAY = "\033[0;90m"
-    BOLD = "\033[1m"
-    END = "\033[0m"

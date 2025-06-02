@@ -268,9 +268,6 @@ async def receive_text(q):
         action_description = await q.get.aio(partition="action")
         if message_transcription == END_OF_STREAM:
             break
-        print(f"T: {message_transcription.strip()}")
-        print(f"S: {scene_description.strip()}")
-        print(f"A: {action_description.strip()}")
         save_last_to_redis(message_transcription.strip(), scene_description.strip(), action_description.strip())
 
 def save_last_to_redis(transcription, scene, action):
