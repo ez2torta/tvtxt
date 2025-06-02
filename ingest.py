@@ -5,6 +5,7 @@ import subprocess
 import uuid
 import requests
 import json
+import redis
 from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
 load_dotenv()
@@ -23,6 +24,16 @@ FORCE_TRANSCRIBE_MS = 10000  # Force transcription if buffer exceeds this many m
 
 connection_string = os.environ['AZURE_STORAGE_CONNECTION_STRING']
 blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+
+r = redis.Redis(
+    host=os.environ.get('REDIS_HOST', 'localhost'),
+    port=os.environ.get('REDIS_PORT', 6379),
+    decode_responses=True,
+    username=os.environ.get('REDIS_USERNAME', ''),
+    password=os.environ.get('REDIS_PASSWORD', '')
+)
+
+REDIS_KEY = 'leotele:latest'
 
 app = modal.App("leotele-realtime-m3u8")
 
@@ -51,6 +62,7 @@ image = (
         "numpy<2",
         "pydub==0.25.1",
         "azure-storage-blob",
+        "redis",
         "python-dotenv"
     )
     .entrypoint([])
@@ -154,9 +166,11 @@ class Parakeet:
                                 os.environ["IMAGE_DESCRIBER_URL"]
                             )
                             await q.put.aio(f"{text}", partition="transcription")
-                            await q.put.aio(f"{scene}", partition="scene")
+                            await q.put.aio(f"{scene['heading']}", partition="scene")
+                            await q.put.aio(f"{scene['action']}", partition="action")
                     await q.put.aio(END_OF_STREAM, partition="transcription")
                     await q.put.aio(END_OF_STREAM, partition="scene")
+                    await q.put.aio(END_OF_STREAM, partition="action")
                     break
 
                 audio_segment, text, force_transcribed = await self.handle_audio_chunk(
@@ -175,7 +189,8 @@ class Parakeet:
                         os.environ["IMAGE_DESCRIBER_URL"]
                     )
                     await q.put.aio(f"{text}", partition="transcription")
-                    await q.put.aio(f"{scene}", partition="scene")
+                    await q.put.aio(f"{scene['heading']}", partition="scene")
+                    await q.put.aio(f"{scene['action']}", partition="action")
         except Exception as e:
             logger.error(f"Error handling queue: {type(e)}: {e}")
             return
@@ -235,20 +250,32 @@ async def send_live_audio(q, m3u8_url):
         await asyncio.sleep(CHUNK_SIZE / TARGET_SAMPLE_RATE)
     await q.put.aio(END_OF_STREAM, partition="audio")
 
+
+
+def load_last_from_redis():
+    data = r.get(REDIS_KEY)
+    if data:
+        try:
+            return json.loads(data)
+        except Exception:
+            return {'transcription': '', 'scene': '', 'action': ''}
+    return {'transcription': '', 'scene': '', 'action': ''}
+
 async def receive_text(q):
     while True:
         message_transcription = await q.get.aio(partition="transcription")
         scene_description = await q.get.aio(partition="scene")
+        action_description = await q.get.aio(partition="action")
         if message_transcription == END_OF_STREAM:
             break
         print(f"T: {message_transcription.strip()}")
         print(f"S: {scene_description.strip()}")
-        save_last_to_stream_json(message_transcription.strip(), scene_description.strip())
+        print(f"A: {action_description.strip()}")
+        save_last_to_redis(message_transcription.strip(), scene_description.strip(), action_description.strip())
 
-def save_last_to_stream_json(transcription, scene):
-    data = {'transcription': transcription, 'scene': scene}
-    with open(STREAM_JSON_PATH, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def save_last_to_redis(transcription, scene, action):
+    data = {'transcription': transcription, 'scene': scene, 'action': action}
+    r.set(REDIS_KEY, json.dumps(data, ensure_ascii=False))
 
 class NoStdStreams(object):
     def __init__(self):

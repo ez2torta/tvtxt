@@ -1,15 +1,30 @@
 from fasthtml.common import *
 import json
 import os
+import redis
+from dotenv import load_dotenv
+load_dotenv()
 
 STREAM_JSON_PATH = os.path.join(os.path.dirname(__file__), 'stream.json')
 
-def load_stream_json():
-    try:
-        with open(STREAM_JSON_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return {'transcription': '', 'scene': ''}
+redis_client = redis.Redis(
+    host=os.environ.get('REDIS_HOST'),
+    port=int(os.environ.get('REDIS_PORT', 6379)),
+    username=os.environ.get('REDIS_USERNAME'),
+    password=os.environ.get('REDIS_PASSWORD'),
+    decode_responses=True
+)
+
+REDIS_KEY = 'leotele:latest'
+
+def load_last_from_redis():
+    data = redis_client.get(REDIS_KEY)
+    if data:
+        try:
+            return json.loads(data)
+        except Exception:
+            return {'transcription': '', 'scene': '', 'action': ''}
+    return {'transcription': '', 'scene': '', 'action': ''}
 
 app,rt = fast_app(
     pico=False,
@@ -39,12 +54,12 @@ app,rt = fast_app(
 
 @rt("/")
 def script_page(req):
-    item = load_stream_json()
+    item = load_last_from_redis()
     return Div(
         Safe("<div class='page-number'>1</div>"),
-        H4("EXT. MEXICO CITY - DAY", _class="scene-heading"),
-        Div(item.get('scene', ''), _class="action"),
-        Div("JOHN HOLMAN (V.O.)", _class="character"),
+        H4(item.get('scene', ''), _class="scene-heading"),
+        Div(item.get('action', ''), _class="action"),
+        Div("NARRATOR", _class="character"),
         Div(item.get('transcription', ''), _class="dialogue"),
         Script("""
         function autoRefresh() {

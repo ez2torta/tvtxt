@@ -130,6 +130,7 @@ class Model:
             tokenizer_path=TOKENIZER_PATH,
             tp_size=GPU_COUNT,  # t_ensor p_arallel size, number of GPUs to split the model over
             log_level=SGL_LOG_LEVEL,
+            grammar_backend="outlines"
         )
         self.runtime.endpoint.chat_template = sgl.lang.chat_template.get_chat_template(
             MODEL_CHAT_TEMPLATE
@@ -137,12 +138,10 @@ class Model:
         sgl.set_default_backend(self.runtime)
 
     @modal.fastapi_endpoint(method="POST", docs=True)
-    def generate(self, request: dict) -> str:
+    def generate(self, request: dict) -> dict:
         from pathlib import Path
-
         import requests
         import sglang as sgl
-        from term_image.image import from_file
 
         start = time.monotonic_ns()
         request_id = uuid4()
@@ -166,20 +165,26 @@ class Model:
             s += sgl.user(sgl.image(str(image_path)) + question)
             s += sgl.assistant(sgl.gen("answer"))
 
-        question = request.get("question")
-        if question is None:
-            question = "Describe the image. Be concise."
 
-        state = image_qa.run(
-            image_path=image_path, question=question, max_new_tokens=128
+        question1 = request.get("question1")
+        if question1 is None:
+            question1 = "Describe the image as a movie script title scene, one line description of the location and time of the day. Example: EXT SUBURBAN HOME - NIGHT. Be very concise."
+        question2 = request.get("question2")
+        if question2 is None:
+            question2 = "Describe the image. Be very concise."
+
+        state1 = image_qa.run(
+            image_path=image_path, question=question1, max_new_tokens=128
+        )
+        state2 = image_qa.run(
+            image_path=image_path, question=question2, max_new_tokens=128
         )
         # show the question and image in the terminal for demonstration purposes
-        print(Colors.BOLD, Colors.GRAY, "Question: ", question, Colors.END, sep="")
+        print(Colors.BOLD, Colors.GRAY, "Question: ", question1, Colors.END, sep="")
         print(
             f"request {request_id} completed in {round((time.monotonic_ns() - start) / 1e9, 2)} seconds"
         )
-
-        return state["answer"]
+        return {"heading": state1["answer"], "action": state2["answer"]}
 
     @modal.exit()  # what should a container do before it shuts down?
     def shutdown_runtime(self):
