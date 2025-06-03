@@ -113,7 +113,7 @@ modal deploy scene_describer.py
 ### 4. **Start the Show**
 Fire up the transcription pipeline:
 ```bash
-python ingest.py
+modal run ingest.py
 ```
 
 ### 5. **Watch the Magic**

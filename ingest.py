@@ -15,7 +15,7 @@ from loguru import logger
 import modal
 
 # URL of the m3u8 stream to use for audio input
-AUDIO_STREAM_URL = "https://live-hls-web-aje.getaj.net/AJE/03.m3u8"
+AUDIO_STREAM_URL = "https://dai.google.com/linear/hls/event/TxSbNMu4R5anKrjV02VOBg/master.m3u8"#https://live-hls-web-aje.getaj.net/AJE/03.m3u8
 
 # Audio processing parameters
 TARGET_SAMPLE_RATE = 16_000
@@ -70,7 +70,6 @@ image = (
 
 END_OF_STREAM = b"END_OF_STREAM_8f13d09"
 
-STREAM_JSON_PATH = os.path.join(os.path.dirname(__file__), 'stream.json')
 
 def stream_audio_from_m3u8(m3u8_url=None, chunk_size=None):
     if m3u8_url is None:
