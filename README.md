@@ -4,6 +4,8 @@
 
 Ever wondered what your favorite TV show would look like as a screenplay? tvtxt is an AI-powered pipeline that watches live television streams and transforms them into properly formatted movie scripts in real-time. Think of it as having a tireless scriptwriter that never blinks, never sleeps, and never misses a moment.
 
+![screenshot](/tvtxt.PNG)
+
 ## The magic behind the curtain
 
 **tvtxt** combines cutting-edge AI models with cloud infrastructure to create a TV-to-screenplay transformation:
