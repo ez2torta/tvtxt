@@ -4,50 +4,50 @@
 
 Ever wondered what your favorite TV show would look like as a screenplay? tvtxt is an AI-powered pipeline that watches live television streams and transforms them into properly formatted movie scripts in real-time. Think of it as having a tireless scriptwriter that never blinks, never sleeps, and never misses a moment.
 
-## The magic behind the curtain 🎭
+## The magic behind the curtain
 
 **tvtxt** combines cutting-edge AI models with cloud infrastructure to create a TV-to-screenplay transformation:
 
 
-### **Modal**
+### **[Modal](https://modal.com/)**
 Modal handles our cloud GPU infrastructure, running two critical AI workloads:
-- **Parakeet ASR Model (NVIDIA)** : Transcribes speech with remarkable accuracy and speed.
-- **Qwen2-VL Vision-Language Model**: Describes visual scenes with cinematic flair.
+- **[Parakeet ASR Model (NVIDIA)](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)** : Transcribes speech with remarkable accuracy and speed.
+- **[Qwen2-VL Vision-Language Model](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct)**: Describes visual scenes with cinematic flair.
 - **Auto-scaling**: Containers spin up and down based on demand.
 - **Concurrent processing**: Handles multiple inference requests simultaneously.
 
-### **Outlines**
+### **[Outlines](https://github.com/dottxt-ai/outlines)**
 Ensures our vision model outputs perfectly formatted JSON responses:
 - **Schema enforcement**: Guarantees consistent screenplay structure.
 
-### **Azure Blob Storage**
+### **[Azure Blob Storage](https://azure.microsoft.com/en-us/products/storage/blobs)**
 Temporarily stores captured video frames for visual analysis:
 - **Ephemeral storage**: Images are uploaded, processed, then forgotten.
 
-### **Redis Cloud**
+### **[Redis Cloud](https://redis.io/cloud/)**
 Acts as the bridge between our backend pipeline and frontend display.
 
-### **FastHTML**
+### **[FastHTML](https://www.fastht.ml/)**
 Creates our live web interface with authentic screenplay styling.
 
-### **FFmpeg**
+### **[FFmpeg](https://ffmpeg.org/)**
 The unsung hero that handles all media processing:
 - **Stream ingestion**: Pulls audio/video from m3u8 live streams
 - **Audio conversion**: Normalizes to 16kHz mono for optimal ASR performance
 - **Frame capture**: Grabs still images at the perfect moment for scene analysis
 
-## How the Magic Happens ✨
+## How the Magic Happens
 
-1. **🎥 Stream Capture**: FFmpeg latches onto a live TV stream, extracting both audio and video
-2. **🎧 Audio Analysis**: Every 10 seconds, audio chunks are sent to Modal's Parakeet ASR model for transcription
-3. **📸 Frame Extraction**: When speech is detected, FFmpeg captures a corresponding video frame
-4. **☁️ Image Upload**: The frame is uploaded to Azure Blob Storage and gets a public URL
-5. **👁️ Visual Understanding**: Modal's Qwen2-VL model analyzes the image and generates a screenplay-formatted scene description
-6. **💾 Memory Update**: The latest transcription and scene description are saved to Redis Cloud
-7. **🖥️ Live Display**: FastHTML serves a web page that auto-refreshes, showing the generated screenplay
-8. **🔄 Repeat**: The cycle continues, creating an ever-updating script of live television
+1. **🎥 Stream Capture**: FFmpeg latches onto a live TV stream, extracting both audio and video.
+2. **🎧 Audio Analysis**: Every 10 seconds, audio chunks are sent to Modal's Parakeet ASR model for transcription.
+3. **📸 Frame Extraction**: When speech is detected, FFmpeg captures a corresponding video frame.
+4. **☁️ Image Upload**: The frame is uploaded to Azure Blob Storage and gets a public URL.
+5. **👁️ Visual Understanding**: Modal's Qwen2-VL model analyzes the image and generates a screenplay-formatted scene description.
+6. **💾 Memory Update**: The latest transcription and scene description are saved to Redis Cloud.
+7. **🖥️ Live Display**: FastHTML serves a web page that auto-refreshes, showing the generated screenplay.
+8. **🔄 Repeat**: The cycle continues, creating an ever-updating script of live television.
 
-## Installation & Setup 🛠️
+## Installation & Setup
 
 ### 1. **Environment Setup**
 ```bash
