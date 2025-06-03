@@ -1,5 +1,8 @@
 # tvtxt 📺✨
 
+> **⚠️ Work in Progress - Technology Showcase**  
+> This is an experimental MVP demonstrating real-time AI capabilities. Not intended as a production-ready product.
+
 **Turn any live TV stream into a real-time movie script. AI watches, transcribes, and writes television as cinema.**
 
 Ever wondered what your favorite TV show would look like as a screenplay? tvtxt is an AI-powered pipeline that watches live television streams and transforms them into properly formatted movie scripts in real-time. Think of it as having a tireless scriptwriter that never blinks, never sleeps, and never misses a moment.
@@ -8,6 +11,25 @@ Ever wondered what your favorite TV show would look like as a screenplay? tvtxt 
 Watch the magic unfold in real-time: [tvtxt live demo](https://tvtxt.com/)
 
 ![screenshot](/tvtxt.PNG)
+
+
+## Project Status
+
+This is a **proof-of-concept showcase** built to demonstrate the integration of several cutting-edge technologies:
+- Real-time speech recognition.
+- Vision-language understanding.
+- Cloud-native AI inference.
+- Live streaming media processing.
+
+**What this is:**
+- A technology demonstration.
+- An experimental MVP.
+- A learning playground for AI + media processing.
+
+**What this is NOT:**
+- A production-ready application.
+- A commercial product.
+- A fully-featured streaming service.
 
 ## The magic behind the curtain
 
