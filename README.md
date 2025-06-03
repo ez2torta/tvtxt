@@ -1,6 +1,6 @@
-# Leotele: Real-Time News Transcription & Scene Description
+# tvtxt: Real-Time News Transcription & Scene Description
 
-**Leotele** is a Python pipeline and webapp that performs real-time audio transcription and visual scene description from a live news video stream (Al Jazeera English). It leverages cloud GPU infrastructure (Modal), state-of-the-art speech-to-text and vision-language models, Redis Cloud for state sharing, and provides a simple web frontend for live monitoring.
+**tvtxt** is a Python pipeline and webapp that performs real-time audio transcription and visual scene description from a live news video stream (Al Jazeera English). It leverages cloud GPU infrastructure (Modal), state-of-the-art speech-to-text and vision-language models, Redis Cloud for state sharing, and provides a simple web frontend for live monitoring.
 
 ## Features
 
@@ -33,25 +33,36 @@
 1. **Install dependencies**
 
    ```bash
-   pip install -r requirements.txt
+   uv venv
+   source venv/bin/activate # or `.venv\Scripts\activate` on Windows
+   uv pip install -r requirements.txt
+   modal token new
    ```
 
 2. **Set up environment variables**
-   - Configure your Azure Blob Storage, Modal, and Redis Cloud credentials in a `.env` file.
+   - Configure your Azure Blob Storage, HugginFace, and Redis Cloud credentials in a `.env` file.
 
-3. **Run the pipeline**
+3. **Deploy the vision-language model endpoint** on Modal:
+
+   ```bash
+   modal deploy scene_describer.py
+   ```
+
+   This will create a Modal endpoint for the `Qwen2-VL-7B-Instruct` model.
+
+4. **Run the pipeline**
 
    ```bash
    python ingest.py
    ```
 
-4. **Start the web frontend**
+5. **Start the web frontend**
 
    ```bash
    python view.py
    ```
 
-5. **Open your browser** to `http://localhost:8000` (or the port shown) to see live results.
+6. **Open your browser** to `http://localhost:8000` (or the port shown) to see live results.
 
 ## Disclaimer
 
