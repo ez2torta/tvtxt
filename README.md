@@ -92,7 +92,8 @@ python ingest.py
 ### 5. **Watch the Magic**
 Launch the web interface:
 ```bash
-python view.py
+cd app
+python main.py
 ```
 
 Open your browser to `http://localhost:5001` and watch as live TV transforms into screenplay format before your eyes!
