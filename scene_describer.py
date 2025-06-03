@@ -57,7 +57,7 @@ vlm_image = (
     )
 )
 
-app = modal.App("leotele-sgl-vlm")
+app = modal.App("tvtxt-vlm")
 
 @app.cls(
     gpu=GPU_CONFIG,

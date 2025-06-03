@@ -14,7 +14,7 @@ redis_client = redis.Redis(
     decode_responses=True
 )
 
-REDIS_KEY = 'leotele:latest'
+REDIS_KEY = 'tvtxt:latest'
 
 def load_last_from_redis():
     data = redis_client.get(REDIS_KEY)

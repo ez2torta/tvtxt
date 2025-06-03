@@ -33,9 +33,9 @@ r = redis.Redis(
     password=os.environ.get('REDIS_PASSWORD', '')
 )
 
-REDIS_KEY = 'leotele:latest'
+REDIS_KEY = 'tvtxt:latest'
 
-app = modal.App("leotele-realtime-m3u8")
+app = modal.App("tvtxt-realtime-m3u8")
 
 model_cache = modal.Volume.from_name("model-cache", create_if_missing=True)
 
