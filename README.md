@@ -47,7 +47,7 @@ Ensures our vision model outputs perfectly formatted JSON responses:
 
 ### Others
 
-- **[Azure Blob Storage:](https://azure.microsoft.com/en-us/products/storage/blobs)**Temporarily stores captured video frames for visual analysis.
+- **[Azure Blob Storage:](https://azure.microsoft.com/en-us/products/storage/blobs)** Temporarily stores captured video frames for visual analysis.
 - **[Redis Cloud:](https://redis.io/cloud/)** Acts as the bridge between our backend pipeline and frontend display.
 - **[FastHTML:](https://www.fastht.ml/)** Creates our live web interface with authentic screenplay styling.
 - **[FFmpeg:](https://ffmpeg.org/)** The unsung hero that handles all media processing.
