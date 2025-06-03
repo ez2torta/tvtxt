@@ -1,69 +1,110 @@
-# tvtxt: Real-Time News Transcription & Scene Description
+# tvtxt 📺✨
 
-**tvtxt** is a Python pipeline and webapp that performs real-time audio transcription and visual scene description from a live news video stream (Al Jazeera English). It leverages cloud GPU infrastructure (Modal), state-of-the-art speech-to-text and vision-language models, Redis Cloud for state sharing, and provides a simple web frontend for live monitoring.
+**Turn any live TV stream into a real-time movie script. AI watches, transcribes, and writes television as cinema.**
 
-## Features
+Ever wondered what your favorite TV show would look like as a screenplay? tvtxt is an AI-powered pipeline that watches live television streams and transforms them into properly formatted movie scripts in real-time. Think of it as having a tireless scriptwriter that never blinks, never sleeps, and never misses a moment.
 
-- **Real-time audio transcription** from an m3u8 video stream (Al Jazeera English)
-- **Scene description** for each video frame using a Vision-Language Model (Qwen2-VL via Outlines/SGLang)
-- **Cloud GPU inference** using Modal for both ASR and VLM
-- **Live web frontend** (Fasthtml) that displays the latest transcription and scene description, auto-refreshing every 2 seconds
-- **No persistent data storage**: Only the latest result is kept in Redis Cloud
-- **Easy to deploy and extend**
+## The magic behind the curtain 🎭
 
-## How it works
+**tvtxt** combines cutting-edge AI models with cloud infrastructure to create a TV-to-screenplay transformation:
 
-1. **Audio & Video Ingestion**: `ingest.py` reads audio and video frames from a live m3u8 stream using ffmpeg.
-2. **Transcription**: Audio is transcribed every 10 seconds (if not silent) using NVIDIA's Parakeet ASR model running on Modal.
-3. **Scene Description**: For each transcription, a video frame is captured and described using Qwen2-VL (via Outlines/SGLang, also on Modal). The endpoint returns a JSON with `heading`, `action`, and `character` fields.
-4. **Result Storage**: The latest transcription and scene description are saved to Redis Cloud (key: `leotele:latest`).
-5. **Web Frontend**: `view.py` serves a simple web page that auto-refreshes to show the latest transcription and scene description, styled as a screenplay.
 
-## File Overview
+### **Modal**
+Modal handles our cloud GPU infrastructure, running two critical AI workloads:
+- **Parakeet ASR Model (NVIDIA)** : Transcribes speech with remarkable accuracy and speed.
+- **Qwen2-VL Vision-Language Model**: Describes visual scenes with cinematic flair.
+- **Auto-scaling**: Containers spin up and down based on demand.
+- **Concurrent processing**: Handles multiple inference requests simultaneously.
 
-- `ingest.py` — Main pipeline: audio/video ingestion, Modal integration, Redis Cloud integration
-- `scene_describer.py` — Modal endpoint for Qwen2-VL scene description (Outlines/SGLang)
-- `view.py` — Web frontend (Fasthtml) for live display, reads from Redis Cloud
-- `.env` — Stores credentials for Azure, Modal, and Redis Cloud
-- `requirements.txt` — Python dependencies (includes modal, outlines, sglang, redis, etc.)
-- `test_m3u8_stream.py`, `test_capture_frame.py` — Utilities for testing stream ingestion
+### **Outlines**
+Ensures our vision model outputs perfectly formatted JSON responses:
+- **Schema enforcement**: Guarantees consistent screenplay structure.
 
-## Quickstart
+### **Azure Blob Storage**
+Temporarily stores captured video frames for visual analysis:
+- **Ephemeral storage**: Images are uploaded, processed, then forgotten.
 
-1. **Install dependencies**
+### **Redis Cloud**
+Acts as the bridge between our backend pipeline and frontend display.
 
-   ```bash
-   uv venv
-   source venv/bin/activate # or `.venv\Scripts\activate` on Windows
-   uv pip install -r requirements.txt
-   modal token new
-   ```
+### **FastHTML**
+Creates our live web interface with authentic screenplay styling.
 
-2. **Set up environment variables**
-   - Configure your Azure Blob Storage, HugginFace, and Redis Cloud credentials in a `.env` file.
+### **FFmpeg**
+The unsung hero that handles all media processing:
+- **Stream ingestion**: Pulls audio/video from m3u8 live streams
+- **Audio conversion**: Normalizes to 16kHz mono for optimal ASR performance
+- **Frame capture**: Grabs still images at the perfect moment for scene analysis
 
-3. **Deploy the vision-language model endpoint** on Modal:
+## How the Magic Happens ✨
 
-   ```bash
-   modal deploy scene_describer.py
-   ```
+1. **🎥 Stream Capture**: FFmpeg latches onto a live TV stream, extracting both audio and video
+2. **🎧 Audio Analysis**: Every 10 seconds, audio chunks are sent to Modal's Parakeet ASR model for transcription
+3. **📸 Frame Extraction**: When speech is detected, FFmpeg captures a corresponding video frame
+4. **☁️ Image Upload**: The frame is uploaded to Azure Blob Storage and gets a public URL
+5. **👁️ Visual Understanding**: Modal's Qwen2-VL model analyzes the image and generates a screenplay-formatted scene description
+6. **💾 Memory Update**: The latest transcription and scene description are saved to Redis Cloud
+7. **🖥️ Live Display**: FastHTML serves a web page that auto-refreshes, showing the generated screenplay
+8. **🔄 Repeat**: The cycle continues, creating an ever-updating script of live television
 
-   This will create a Modal endpoint for the `Qwen2-VL-7B-Instruct` model.
+## Installation & Setup 🛠️
 
-4. **Run the pipeline**
+### 1. **Environment Setup**
+```bash
+uv venv
+source venv/bin/activate  # or `.venv\Scripts\activate` on Windows
+uv pip install -r requirements.txt
+modal token new
+```
 
-   ```bash
-   python ingest.py
-   ```
+### 2. **Configure Your Credentials**
+Create a `.env` file with your secret weapons:
+```env
+# Azure Blob Storage (for frame storage)
+AZURE_STORAGE_CONNECTION_STRING=your_azure_connection_string
 
-5. **Start the web frontend**
+# Redis Cloud (for state management)
+REDIS_HOST=your_redis_host
+REDIS_PORT=your_redis_port
+REDIS_USERNAME=your_redis_username
+REDIS_PASSWORD=your_redis_password
 
-   ```bash
-   python view.py
-   ```
+# HuggingFace (for model access)
+HF_TOKEN=your_huggingface_token
 
-6. **Open your browser** to `http://localhost:8000` (or the port shown) to see live results.
+# Modal endpoint (will be generated after deployment)
+IMAGE_DESCRIBER_URL=your_modal_endpoint_url
+```
+
+### 3. **Deploy the Vision AI**
+Launch your scene description model to the cloud:
+```bash
+modal deploy scene_describer.py
+```
+*Note: Copy the generated endpoint URL to your `.env` file as `IMAGE_DESCRIBER_URL`*
+
+### 4. **Start the Show**
+Fire up the transcription pipeline:
+```bash
+python ingest.py
+```
+
+### 5. **Watch the Magic**
+Launch the web interface:
+```bash
+python view.py
+```
+
+Open your browser to `http://localhost:5001` and watch as live TV transforms into screenplay format before your eyes!
+
+## Live demo
+
+tvtxt embraces ephemerality by design. Like live theater, each moment exists only in the present:
+- **No databases**: Only the current scene matters.
+- **No history**: Previous scripts vanish like morning mist.
+- **No storage**: Frames and audio exist only long enough to be processed.
+
 
 ## Disclaimer
 
-This is a live transcription and visual description of the Al Jazeera English channel. No data is stored.
+This project demonstrates real-time AI transcription and visual analysis using Al Jazeera English as a public live stream. No content is stored, archived, or redistributed. The system processes live broadcasts in real-time for educational and demonstration purposes only.

@@ -5,7 +5,6 @@ import redis
 from dotenv import load_dotenv
 load_dotenv()
 
-STREAM_JSON_PATH = os.path.join(os.path.dirname(__file__), 'stream.json')
 
 redis_client = redis.Redis(
     host=os.environ.get('REDIS_HOST'),
@@ -68,7 +67,7 @@ def script_page(req):
         autoRefresh();
         """),
         Div(
-            Safe("This is a live transcription and visual description of the Al Jazeera English channel. No data is stored. You can view the code at <a href='https://github.com/aastroza/leotele' target='_blank'>https://github.com/aastroza/leotele</a>"),
+            Safe("This is a live transcription and visual description of the Al Jazeera English channel. No data is stored. You can view the code at <a href='https://github.com/aastroza/tvtxt' target='_blank'>https://github.com/aastroza/tvtxt</a>"),
             _class="disclaimer"
         ),
         _class="script-page"
