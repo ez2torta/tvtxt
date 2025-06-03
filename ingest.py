@@ -119,7 +119,7 @@ def get_scene_description(image_url, endpoint_url, question="Describe the scene"
     response.raise_for_status()
     return response.json()
 
-@app.cls(volumes={"/cache": model_cache}, gpu="a10g", image=image, secrets=[modal.Secret.from_dotenv()])
+@app.cls(volumes={"/cache": model_cache}, gpu="a10g", image=image, secrets=[modal.Secret.from_dotenv()], timeout=3000)
 @modal.concurrent(max_inputs=14, target_inputs=10)
 class Parakeet:
     @modal.enter()

@@ -40,28 +40,17 @@ This is a **proof-of-concept showcase** built to demonstrate the integration of 
 Modal handles our cloud GPU infrastructure, running two critical AI workloads:
 - **[Parakeet ASR Model (NVIDIA)](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)** : Transcribes speech with remarkable accuracy and speed.
 - **[Qwen2-VL Vision-Language Model](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct)**: Describes visual scenes with cinematic flair.
-- **Auto-scaling**: Containers spin up and down based on demand.
-- **Concurrent processing**: Handles multiple inference requests simultaneously.
 
 ### **[Outlines](https://github.com/dottxt-ai/outlines)**
 Ensures our vision model outputs perfectly formatted JSON responses:
 - **Schema enforcement**: Guarantees consistent screenplay structure.
 
-### **[Azure Blob Storage](https://azure.microsoft.com/en-us/products/storage/blobs)**
-Temporarily stores captured video frames for visual analysis:
-- **Ephemeral storage**: Images are uploaded, processed, then forgotten.
+### Others
 
-### **[Redis Cloud](https://redis.io/cloud/)**
-Acts as the bridge between our backend pipeline and frontend display.
-
-### **[FastHTML](https://www.fastht.ml/)**
-Creates our live web interface with authentic screenplay styling.
-
-### **[FFmpeg](https://ffmpeg.org/)**
-The unsung hero that handles all media processing:
-- **Stream ingestion**: Pulls audio/video from m3u8 live streams
-- **Audio conversion**: Normalizes to 16kHz mono for optimal ASR performance
-- **Frame capture**: Grabs still images at the perfect moment for scene analysis
+- **[Azure Blob Storage:](https://azure.microsoft.com/en-us/products/storage/blobs)**Temporarily stores captured video frames for visual analysis.
+- **[Redis Cloud:](https://redis.io/cloud/)** Acts as the bridge between our backend pipeline and frontend display.
+- **[FastHTML:](https://www.fastht.ml/)** Creates our live web interface with authentic screenplay styling.
+- **[FFmpeg:](https://ffmpeg.org/)** The unsung hero that handles all media processing.
 
 ## How the Magic Happens
 
