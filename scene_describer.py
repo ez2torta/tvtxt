@@ -1,169 +1,200 @@
 import os
 import time
 from uuid import uuid4
+from fastapi import FastAPI, Request
+from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
+from io import BytesIO
+from urllib.request import urlopen
+from PIL import Image
+import torch
+import outlines
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+from dotenv import load_dotenv
+import requests
+from base64 import b64decode
 
-import modal
+# Cargar variables de entorno desde .env si existe
+load_dotenv()
 
+# MODEL_PATH = os.environ.get("MODEL_PATH", "Qwen/Qwen2-VL-7B-Instruct")
+MODEL_PATH = "Qwen/Qwen2.5-VL-3B-Instruct" # probando ahora que tan veloz puede ser
+# MODEL_PATH = "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1"
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
-GPU_TYPE = os.environ.get("GPU_TYPE", "l40s")
-GPU_COUNT = os.environ.get("GPU_COUNT", 1)
+def get_image_from_url(image_url):
+    img_byte_stream = BytesIO(urlopen(image_url).read())
+    return Image.open(img_byte_stream).convert("RGB")
 
-GPU_CONFIG = f"{GPU_TYPE}:{GPU_COUNT}"
-MINUTES = 60  # seconds
-MODEL_PATH = "Qwen/Qwen2-VL-7B-Instruct"
+class SceneMovieScript(BaseModel):
+    heading: str = Field(..., description="One line description of the location and time of the day. Be concise. Example: EXT SUBURBAN HOME - NIGHT")
+    action: str = Field(..., description="The description of the scene. Be very concise and clear.")
+    character: str = Field(..., description="The name of the character speaking. If there is no character, use 'Narrator'.")
 
-# We download it from the Hugging Face Hub using the Python function below.
-def download_model_to_image():
-    import transformers
-    from huggingface_hub import snapshot_download
+# Inicialización del modelo y procesador al inicio
+print("Cargando modelo y procesador...")
 
-    snapshot_download(
-        MODEL_PATH,
-        ignore_patterns=["*.pt", "*.bin"],
-    )
+# Si hay token de Hugging Face, usarlo para autenticar las descargas
+model_kwargs = {
+    "device_map": "auto",
+    "torch_dtype": torch.bfloat16,
+}
+if HF_TOKEN:
+    model_kwargs["token"] = HF_TOKEN
 
-    # otherwise, this happens on first inference
-    transformers.utils.move_cache()
-
-
-# Modal runs Python functions on containers in the cloud.
-# The environment those functions run in is defined by the container's `Image`.
-# The block of code below defines our example's `Image`.
-cuda_version = "12.8.0"  # should be no greater than host CUDA version
-flavor = "devel"  #  includes full CUDA toolkit
-operating_sys = "ubuntu22.04"
-tag = f"{cuda_version}-{flavor}-{operating_sys}"
-
-vlm_image = (
-    modal.Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.11")
-    .apt_install("git")
-    .pip_install(
-        "transformers==4.47.1",
-        "numpy<2",
-        "fastapi[standard]==0.115.4",
-        "pydantic==2.9.2",
-        "requests==2.32.3",
-        "starlette==0.41.2",
-        "torch==2.4.0",
-        "outlines",
-        "datasets",
-        "sentencepiece",
-        "accelerate>=0.26.0",
-        "pillow",
-        "rich"
-    )
-    .run_function(  # download the model by running a Python function
-        download_model_to_image
-    )
+model = outlines.models.transformers_vision(
+    MODEL_PATH,
+    model_class=Qwen2_5_VLForConditionalGeneration,
+    model_kwargs=model_kwargs,
 )
 
-app = modal.App("tvtxt-vlm")
+# Forzar el uso del token en el procesador también si es necesario
+if HF_TOKEN:
+    print("Using Hugging Face token for processor...")
+    print(HF_TOKEN)
+    processor = AutoProcessor.from_pretrained(MODEL_PATH, token=HF_TOKEN)
+else:
+    processor = AutoProcessor.from_pretrained(MODEL_PATH)
 
-@app.cls(
-    gpu=GPU_CONFIG,
-    timeout=20 * MINUTES,
-    scaledown_window=20 * MINUTES,
-    image=vlm_image,
+print("Modelo y procesador cargados.")
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-@modal.concurrent(max_inputs=100)
-class Model:
-    @modal.enter()  # what should a container do after it starts but before it gets input?
-    def start_runtime(self):
-        import outlines
-        import torch
-        from transformers import Qwen2VLForConditionalGeneration
 
-        # Create the Outlines model
-        self.model = outlines.models.transformers_vision(
-            MODEL_PATH,
-            model_class=Qwen2VLForConditionalGeneration,
-            model_kwargs={
-                "device_map": "auto",
-                "torch_dtype": torch.bfloat16,
-            },
-            processor_kwargs={
-                "device": "cuda", # set to "cpu" if you don't have a GPU
-            },
-        )
+import datetime
 
-    @modal.fastapi_endpoint(method="POST", docs=True)
-    def generate(self, request: dict) -> dict:
-        import requests
-        from pydantic import BaseModel, Field
-        from io import BytesIO
-        from urllib.request import urlopen
-        from transformers import AutoProcessor
-        import outlines
+def ts():
+    return datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S.%f]")
 
-        from PIL import Image
+@app.post("/generate")
+async def generate(request: Request):
+    print(ts(), "[DEBUG] Recibida petición POST /generate")
+    t0 = time.monotonic()
+    data = await request.json()
+    print(ts(), "[DEBUG] JSON recibido:", data, f"(+{time.monotonic()-t0:.2f}s)")
+    image_url = data.get("image_url")
+    if image_url is None:
+        image_url = "https://alonsoastroza.com/projects/ft-hackathon/avello.jpg"
+    print(ts(), f"[DEBUG] Usando image_url: {image_url}")
+    request_id = uuid4()
+    print(ts(), f"[DEBUG] Generating response to request {request_id}")
 
-        start = time.monotonic_ns()
-        request_id = uuid4()
-        print(f"Generating response to request {request_id}")
+    print(ts(), "[DEBUG] Descargando imagen y convirtiendo a PIL.Image...")
+    t_img = time.monotonic()
+    image = get_image_from_url(image_url)
+    print(ts(), f"[DEBUG] Imagen descargada y convertida. (+{time.monotonic()-t_img:.2f}s)")
 
-        image_url = request.get("image_url")
-        if image_url is None:
-            image_url = (
-                "https://alonsoastroza.com/projects/ft-hackathon/avello.jpg"
-            )
+    # Set up the content you want to send to the model
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": image,
+                },
+                {
+                    "type": "text",
+                    "text": f"""You are an expert at writing movie scripts based on images.\nPlease describe the scene in a movie script format. Be concise and clear.\n\nReturn the information in the following JSON schema:\n{SceneMovieScript.model_json_schema()}\n""",
+                },
+            ],
+        }
+    ]
 
-        response = requests.get(image_url)
-        response.raise_for_status()
+    print(ts(), "[DEBUG] Aplicando plantilla de chat con el processor...")
+    t_prompt = time.monotonic()
+    prompt = processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    print(ts(), f"[DEBUG] Prompt generado. (+{time.monotonic()-t_prompt:.2f}s)")
 
-        # Define the schema using Pydantic
-        class SceneMovieScript(BaseModel):
-            heading: str = Field(..., description="One line description of the location and time of the day. Be concise. Example: EXT SUBURBAN HOME - NIGHT")
-            action: str = Field(..., description="The description of the scene. Be very concise and clear.")
-            character: str = Field(..., description="The name of the character speaking. If there is no character, use 'Narrator'.")
+    print(ts(), "[DEBUG] Inicializando script_generator de outlines...")
+    t_gen = time.monotonic()
+    script_generator = outlines.generate.json(
+        model,
+        SceneMovieScript,
+    )
+    print(ts(), f"[DEBUG] script_generator inicializado. (+{time.monotonic()-t_gen:.2f}s)")
 
-        def get_image_from_url(image_url):
-            img_byte_stream = BytesIO(urlopen(image_url).read())
-            return Image.open(img_byte_stream).convert("RGB")
+    print(ts(), "[DEBUG] Ejecutando script_generator (esto puede demorar mucho si el modelo es grande)...")
+    t_run = time.monotonic()
+    result = script_generator(prompt, [image])
+    print(ts(), f"[DEBUG] script_generator finalizado. (+{time.monotonic()-t_run:.2f}s)")
 
-        # Set up the content you want to send to the model
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        # The image is provided as a PIL Image object
-                        "type": "image",
-                        "image": get_image_from_url(image_url),
-                    },
-                    {
-                        "type": "text",
-                        "text": f"""You are an expert at writing movie scripts based on images.
-                        Please describe the scene in a movie script format. Be concise and clear.
+    total = time.monotonic() - t0
+    print(ts(), f"request {request_id} completed in {total:.2f} seconds")
+    print(ts(), f"Response: {result}")
 
-                        Return the information in the following JSON schema:
-                        {SceneMovieScript.model_json_schema()}
-                    """},
-                ],
-            }
-        ]
+    return JSONResponse({"heading": result.heading, "action": result.action, "character": result.character})
 
-        # Convert the messages to the final prompt
-        processor = AutoProcessor.from_pretrained(MODEL_PATH)
-        prompt = processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+@app.post("/generate_base64")
+async def generate_base64(request: Request):
+    print(ts(), "[DEBUG] Recibida petición POST /generate_base64")
+    t0 = time.monotonic()
+    data = await request.json()
+    print(ts(), "[DEBUG] JSON recibido:", data, f"(+{time.monotonic()-t0:.2f}s)")
+    image_b64 = data.get("image_base64")
+    if not image_b64:
+        return JSONResponse({"error": "Missing image_base64 field"}, status_code=400)
+    print(ts(), f"[DEBUG] Recibido base64, decodificando...")
+    t_img = time.monotonic()
+    try:
+        img_bytes = b64decode(image_b64)
+        image = Image.open(BytesIO(img_bytes)).convert("RGB")
+    except Exception as e:
+        print(ts(), f"[ERROR] No se pudo decodificar la imagen: {e}")
+        return JSONResponse({"error": "Invalid base64 image"}, status_code=400)
+    print(ts(), f"[DEBUG] Imagen decodificada. (+{time.monotonic()-t_img:.2f}s)")
 
-        script_generator = outlines.generate.json(
-            self.model,
-            SceneMovieScript,
+    # Set up the content you want to send to the model
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": image,
+                },
+                {
+                    "type": "text",
+                    "text": f"""You are an expert at writing movie scripts based on images.\nPlease describe the scene in a movie script format. Be concise and clear.\n\nReturn the information in the following JSON schema:\n{SceneMovieScript.model_json_schema()}\n""",
+                },
+            ],
+        }
+    ]
 
-        )
+    print(ts(), "[DEBUG] Aplicando plantilla de chat con el processor...")
+    t_prompt = time.monotonic()
+    prompt = processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    print(ts(), f"[DEBUG] Prompt generado. (+{time.monotonic()-t_prompt:.2f}s)")
 
-        # Generate the receipt summary
-        result = script_generator(prompt, [get_image_from_url(image_url)])
+    print(ts(), "[DEBUG] Inicializando script_generator de outlines...")
+    t_gen = time.monotonic()
+    script_generator = outlines.generate.json(
+        model,
+        SceneMovieScript,
+    )
+    print(ts(), f"[DEBUG] script_generator inicializado. (+{time.monotonic()-t_gen:.2f}s)")
 
-        print(
-            f"request {request_id} completed in {round((time.monotonic_ns() - start) / 1e9, 2)} seconds"
-        )
-        print(f"Response: {result}")
-    
-        return {"heading": result.heading, "action": result.action, "character": result.character}
+    print(ts(), "[DEBUG] Ejecutando script_generator (esto puede demorar mucho si el modelo es grande)...")
+    t_run = time.monotonic()
+    result = script_generator(prompt, [image])
+    print(ts(), f"[DEBUG] script_generator finalizado. (+{time.monotonic()-t_run:.2f}s)")
 
-    @modal.exit()  # what should a container do before it shuts down?
-    def shutdown_runtime(self):
-        self.runtime.shutdown()
+    total = time.monotonic() - t0
+    print(ts(), f"request (base64) completed in {total:.2f} seconds")
+    print(ts(), f"Response: {result}")
+
+    return JSONResponse({"heading": result.heading, "action": result.action, "character": result.character})
+
+# Para correr localmente: uvicorn scene_describer:app --reload
