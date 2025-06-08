@@ -5,3 +5,13 @@ redis
 python-dotenv
 loguru
 outlines
+fastapi
+uvicorn
+pillow
+transformers
+datasets
+torch
+torchvision
+accelerate
+requests
+pydantic
