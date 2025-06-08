@@ -10,9 +10,9 @@ if [ -z "$IMG" ]; then
   exit 1
 fi
 
-# Redimensionar la imagen a 512px de ancho (manteniendo proporción) y guardar como temporal
+# Redimensionar la imagen a 1280x720 (720p) y guardar como temporal
 TMP_IMG="resized_$$.jpg"
-convert "$IMG" -resize 512x "$TMP_IMG"
+convert "$IMG" -resize 1280x720\! "$TMP_IMG"
 
 BASE64_IMG=$(base64 -w 0 "$TMP_IMG")
 echo "{\"image_base64\": \"${BASE64_IMG}\"}" > payload.json
