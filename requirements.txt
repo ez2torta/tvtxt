@@ -8,6 +8,9 @@ outlines
 fastapi
 uvicorn
 pillow
+opencv-python
+numpy
+pytesseract
 transformers
 datasets
 torch

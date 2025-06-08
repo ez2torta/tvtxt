@@ -61,4 +61,5 @@ app.add_middleware(
 app.post("/generate")(api_generate(processor, model, FightingGameHUD))
 app.post("/generate_base64")(api_generate_base64(processor, model, FightingGameHUD))
 
+
 # Para correr localmente: uvicorn scene_describer_cpu:app --reload

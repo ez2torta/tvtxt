@@ -1,0 +1,5 @@
+# Para levantar la API de Hugging Face (modelo grande, CPU):
+uvicorn scene_describer_cpu:app --reload
+
+# Para levantar la API de Computer Vision clásica (OpenCV + Tesseract):
+uvicorn scene_describer_cv:app --reload
