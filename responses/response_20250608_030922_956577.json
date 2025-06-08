@@ -1,0 +1,28 @@
+{
+  "player1": {
+    "character": "KYOSUKE",
+    "health": "488",
+    "ratio": 1,
+    "guard_gauge": "+12.0",
+    "position": [
+      2,
+      2,
+      1264,
+      729
+    ]
+  },
+  "player2": {
+    "character": "BEN I MARIUJU",
+    "health": "488",
+    "ratio": 2,
+    "guard_gauge": "",
+    "position": [
+      591,
+      2,
+      1264,
+      729
+    ]
+  },
+  "round_timer": 800,
+  "combo_counter_messages": "14 Hit Combo"
+}
